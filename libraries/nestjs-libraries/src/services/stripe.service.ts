@@ -5,7 +5,7 @@ import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/s
 import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import { BillingSubscribeDto } from '@gitroom/nestjs-libraries/dtos/billing/billing.subscribe.dto';
-import { groupBy } from 'lodash';
+import { groupBy, pick } from 'lodash';
 import { pricing } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { AuthService } from '@gitroom/helpers/auth/auth.service';
 import { TrackService } from '@gitroom/nestjs-libraries/track/track.service';
@@ -21,6 +21,19 @@ import {
 import { STRIPE_PROVIDER } from '@gitroom/nestjs-libraries/services/payment/payment.providers';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_nothing');
+
+// Stripe subscription metadata drives webhook routing (`service`) and the
+// entitlement the webhook grants, so only the fields BillingSubscribeDto
+// declares are copied from the request, and server-owned keys come after them.
+const subscribeMetadata = (body: BillingSubscribeDto) =>
+  pick(body, [
+    'period',
+    'billing',
+    'utm',
+    'dub',
+    'datafast_session_id',
+    'datafast_visitor_id',
+  ]);
 
 @PaymentProvider({ provider: STRIPE_PROVIDER })
 export class StripeService extends PaymentProviderAbstract {
@@ -657,8 +670,8 @@ export class StripeService extends PaymentProviderAbstract {
       subscription_data: {
         ...(allowTrial ? { trial_period_days: 7 } : {}),
         metadata: {
+          ...subscribeMetadata(body),
           service: 'gitroom',
-          ...body,
           userId,
           uniqueId,
           ud,
@@ -718,8 +731,8 @@ export class StripeService extends PaymentProviderAbstract {
       subscription_data: {
         ...(allowTrial ? { trial_period_days: 7 } : {}),
         metadata: {
+          ...subscribeMetadata(body),
           service: 'gitroom',
-          ...body,
           userId,
           uniqueId,
           ud,
@@ -1058,8 +1071,8 @@ export class StripeService extends PaymentProviderAbstract {
       await stripe.subscriptions.update(currentUserSubscription.data[0].id, {
         cancel_at_period_end: false,
         metadata: {
+          ...subscribeMetadata(body),
           service: 'gitroom',
-          ...body,
           userId,
           id,
           ud: uniqueId,
